@@ -3,12 +3,14 @@ import json
 import numpy as np
 import aiohttp
 from collections import OrderedDict
+import os.path
+import base64
 
 class CheckError(Exception):
   pass
 
 # https://stackoverflow.com/a/43621819/209184
-def deep_get(_dict, keys, default=None):
+def dict_get(_dict, keys, default=None):
   for key in keys:
     if isinstance(_dict, dict):
       _dict = _dict.get(key, default)
@@ -22,40 +24,61 @@ def parse_date(date_string, default=None):
   except ValueError:
     return default
 
-def reverse(_array):
+def array_reverse(_array):
   return _array[::-1]
 
 async def query(params):
   # Use the API key to perform a query on the Check API.
-  # Apply the GraphQL query in check.gql.
-  team = params['team'].strip()
+  project = base64.encodestring('Project/{0}'.format(os.path.split(params['project'])[1]).encode()).decode('utf-8')
   key = params['key'].strip()
   host = params['host'].strip()
-  query = {
-    'query': """
+  cursor = ''
+  page = 20
+  query = """
 query {
-  team(slug: "${team}") {
-    projects { edges { node {
-      title
-      project_medias { edges { node {
-        user {
-          id
-          name
+  node(id: "%(project)s") {
+    ...F0
+  }
+} fragment F0 on Project {
+  id
+  dbid
+  title
+  project_medias(first: %(page)d, after: "%(cursor)s") {
+    pageInfo {
+      hasNextPage
+      startCursor
+      hasPreviousPage
+      endCursor
+    }
+    edges { cursor node {
+      user {
+        id
+        name
+      }
+      created_at
+      report_type
+      metadata
+      last_status
+      media {
+        quote
+        picture
+        url
+        embed
+      }
+      tags { edges { node {
+        tag_text
+      }}}
+      tasks { edges { node {
+        annotator {
+          user {
+            id
+            name
+          }
         }
         created_at
-        report_type
-        metadata
-        last_status
-        media {
-          quote
-          picture
-          url
-          embed
-        }
-        tags { edges { node {
-          tag_text
-        }}}
-        tasks { edges { node {
+        label
+        status
+        first_response {
           annotator {
             user {
               id
@@ -63,9 +86,10 @@ query {
             }
           }
           created_at
-          label
-          status
-          first_response {
+          content
+        }
+        log { edges { node {
+          annotation {
             annotator {
               user {
                 id
@@ -75,54 +99,54 @@ query {
             created_at
             content
           }
-          log { edges { node {
-            annotation {
-              annotator {
-                user {
-                  id
-                  name
-                }
-              }
-              created_at
-              content
-            }
-            event_type
-          }}}
-        }}}
-        comments: annotations(annotation_type: "comment") { edges { node {
-          annotator {
-            user {
-              id
-              name
-            }
-          }
-          created_at
-          content
-        }}}
-        log { edges { node {
-          created_at
-          user {
-            id
-          }
           event_type
         }}}
       }}}
-    }}}
+      comments: annotations(annotation_type: "comment") { edges { node {
+        annotator {
+          user {
+            id
+            name
+          }
+        }
+        created_at
+        content
+      }}}
+      log { edges { node {
+        created_at
+        user {
+          id
+        }
+        event_type
+      }}}
+    }}
   }
 }
-    """.replace('${team}', team)
-  }
+"""
   async with aiohttp.ClientSession(headers={ 'X-Check-Token': key }) as session:
-    async with session.post(host + '/api/graphql', data=query) as response:
-      json = await response.json()
-      if (json.get('error')):
-        raise CheckError(json['error'])
-      if (json.get('errors')):
-        raise CheckError(json['errors'][0]['message'])
-      return json
+    data = None
+    while True:
+      request = { 'query': query % { 'project': project, 'page': page, 'cursor': cursor } }
+      async with session.post(host + '/api/graphql', data=request) as response:
+        d = await response.json()
+        if (d.get('error')):
+          raise CheckError(d['error'])
+        if (d.get('errors')):
+          raise CheckError(d['errors'][0]['message'])
+        # Accumulate results into `data`.
+        if data == None:
+          data = dict(d)
+        else:
+          data['data']['node']['project_medias']['edges'] += d['data']['node']['project_medias']['edges']
+        # Next page or exit
+        if (d['data']['node']['project_medias']['pageInfo']['hasNextPage']):
+          cursor = d['data']['node']['project_medias']['pageInfo']['endCursor']
+        else:
+          break
+    return data
 
 def media_time_to_status(media, first=True):
-  times = list(map(lambda l: l['node']['created_at'], [l for l in reverse(media['node']['log']['edges']) if l['node']['event_type'] == 'update_dynamicannotationfield']))
+  times = list(map(lambda l: l['node']['created_at'], [l for l in array_reverse(media['node']['log']['edges']) if l['node']['event_type'] == 'update_dynamicannotationfield']))
   if len(times) == 0:
     return None
   time = times[0] if first else times[-1]
@@ -159,7 +183,7 @@ def task_answer(task):
   return None
 
 def media_tags(media):
-  tags = reverse(media['node']['tags']['edges'])
+  tags = array_reverse(media['node']['tags']['edges'])
   if len(tags) == 0:
     return None
   return ', '.join(map(lambda t: t['node']['tag_text'], tags))
@@ -167,7 +191,7 @@ def media_tags(media):
 def media_tasks(media):
   # Return a dict of all tasks in a single row
   tasks = {}
-  for i, task in enumerate(reverse(media['node']['tasks']['edges'])):
+  for i, task in enumerate(array_reverse(media['node']['tasks']['edges'])):
     tasks['task_%(i)d_question' % { 'i': i+1 }] = task['node']['label']
     tasks['task_%(i)d_comments' % { 'i': i+1 }] = task_comments(task['node'])
     tasks['task_%(i)d_added_by' % { 'i': i+1 }] = format_user(task['node']['annotator']['user'], False)
@@ -182,36 +206,36 @@ def media_tasks(media):
 def format_user(user, anonymize):
   return 'Anonymous' if anonymize else user['name']
 
-def flatten(team):
+def flatten(data):
   # Convert the GraphQL result to a Pandas DataFrame.
   df = []
-  for project in team['data']['team']['projects']['edges']:
-    for media in project['node']['project_medias']['edges']:
-      metadata = json.loads(media['node']['metadata'])
-      df.append(OrderedDict({
-        'project': project['node']['title'],
-        'title': metadata['title'],
-        'added_by': format_user(media['node']['user'], False),
-        'added_by_anon': format_user(media['node']['user'], True),
-        'date_added': pd.Timestamp.fromtimestamp(int(media['node']['created_at'])),
-        'status': media['node']['last_status'],
-        'content': media['node']['media']['quote'] if media['node']['report_type'] == 'claim' else metadata['description'],
-        'url': {
-          'uploadedimage': media['node']['media']['picture'],
-          'link': media['node']['media']['url']
-        }.get(media['node']['report_type']),
-        'type': media['node']['media']['embed']['provider'] if media['node']['report_type'] == 'link' else media['node']['report_type'],
-        'date_published': parse_date(deep_get(media, ['node', 'media', 'embed', 'published_at'], '')),
-        'tags': media_tags(media),
-        'comments': media_comments(media),
-        'count_contributors': np.unique(map(lambda l: l['node']['user']['id'], media['node']['log']['edges'])).size,
-        'count_notes': len(media['node']['comments']['edges']),
-        'count_tasks': len(media['node']['tasks']['edges']),
-        'count_tasks_completed': len([t for t in media['node']['tasks']['edges'] if t['node']['status'] == 'resolved']),
-        'time_to_first_status': media_time_to_status(media, True),
-        'time_to_last_status': media_time_to_status(media, False),
-        **media_tasks(media),
-      }))
+  project = data['data']['node']
+  for media in project['project_medias']['edges']:
+    metadata = json.loads(media['node']['metadata'])
+    df.append(OrderedDict({
+      'project': project['title'],
+      'title': metadata['title'],
+      'added_by': format_user(media['node']['user'], False),
+      'added_by_anon': format_user(media['node']['user'], True),
+      'date_added': pd.Timestamp.fromtimestamp(int(media['node']['created_at'])),
+      'status': media['node']['last_status'],
+      'content': media['node']['media']['quote'] if media['node']['report_type'] == 'claim' else metadata['description'],
+      'url': {
+        'uploadedimage': media['node']['media']['picture'],
+        'link': media['node']['media']['url']
+      }.get(media['node']['report_type']),
+      'type': media['node']['media']['embed']['provider'] if media['node']['report_type'] == 'link' else media['node']['report_type'],
+      'date_published': parse_date(dict_get(media, ['node', 'media', 'embed', 'published_at'], '')),
+      'tags': media_tags(media),
+      'comments': media_comments(media),
+      'count_contributors': np.unique(map(lambda l: l['node']['user']['id'], media['node']['log']['edges'])).size,
+      'count_notes': len(media['node']['comments']['edges']),
+      'count_tasks': len(media['node']['tasks']['edges']),
+      'count_tasks_completed': len([t for t in media['node']['tasks']['edges'] if t['node']['status'] == 'resolved']),
+      'time_to_first_status': media_time_to_status(media, True),
+      'time_to_last_status': media_time_to_status(media, False),
+      **media_tasks(media),
+    }))
   return pd.DataFrame(df)
 
 async def fetch(params, **kwargs):

@@ -8,7 +8,7 @@
   "icon": "meedan",
   "parameters": [
     {
-      "name": "API host",
+      "name": "API URL",
       "id_name": "host",
       "type": "string"
     },
@@ -18,8 +18,8 @@
       "type": "string"
     },
     {
-      "name": "Team",
-      "id_name": "team",
+      "name": "Project URL",
+      "id_name": "project",
       "type": "string"
     },
     {
