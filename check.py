@@ -55,6 +55,8 @@ query {
         id
         name
       }
+      id
+      dbid
       created_at
       report_type
       metadata
@@ -188,21 +190,6 @@ def media_tags(media):
     return None
   return ', '.join(map(lambda t: t['node']['tag_text'], tags))
 
-def media_tasks(media):
-  # Return a dict of all tasks in a single row
-  tasks = {}
-  for i, task in enumerate(array_reverse(media['node']['tasks']['edges'])):
-    tasks['task_%(i)d_question' % { 'i': i+1 }] = task['node']['label']
-    tasks['task_%(i)d_comments' % { 'i': i+1 }] = task_comments(task['node'])
-    tasks['task_%(i)d_added_by' % { 'i': i+1 }] = format_user(task['node']['annotator']['user'], False)
-    tasks['task_%(i)d_added_by_anon' % { 'i': i+1 }] = format_user(task['node']['annotator']['user'], True)
-    if task['node']['first_response']:
-      tasks['task_%(i)d_answer' % { 'i': i+1 }] = task_answer(task['node'])
-      tasks['task_%(i)d_date_answered' % { 'i': i+1 }] = pd.Timestamp.fromtimestamp(int(media['node']['created_at']))
-      tasks['task_%(i)d_answered_by' % { 'i': i+1 }] = format_user(task['node']['first_response']['annotator']['user'], False)
-      tasks['task_%(i)d_answered_by_anon' % { 'i': i+1 }] = format_user(task['node']['first_response']['annotator']['user'], True)
-  return tasks
-
 def format_user(user, anonymize):
   return 'Anonymous' if anonymize else user['name']
 
@@ -212,8 +199,9 @@ def flatten(data):
   project = data['data']['node']
   for media in project['project_medias']['edges']:
     metadata = json.loads(media['node']['metadata'])
-    df.append(OrderedDict({
+    base = OrderedDict({
       'project': project['title'],
+      'identifier': str(media['node']['dbid']),
       'title': metadata['title'],
       'added_by': format_user(media['node']['user'], False),
       'added_by_anon': format_user(media['node']['user'], True),
@@ -233,9 +221,24 @@ def flatten(data):
       'count_tasks': len(media['node']['tasks']['edges']),
       'count_tasks_completed': len([t for t in media['node']['tasks']['edges'] if t['node']['status'] == 'resolved']),
       'time_to_first_status': media_time_to_status(media, True),
-      'time_to_last_status': media_time_to_status(media, False),
-      **media_tasks(media),
-    }))
+      'time_to_last_status': media_time_to_status(media, False)
+    })
+    if base['count_tasks'] == 0:
+      df.append(base)
+    else:
+      for i, task in enumerate(array_reverse(media['node']['tasks']['edges'])):
+        item = base.copy()
+        item['task'] = i+1
+        item['task_question'] = task['node']['label']
+        item['task_comments'] = task_comments(task['node'])
+        item['task_added_by'] = format_user(task['node']['annotator']['user'], False)
+        item['task_added_by_anon'] = format_user(task['node']['annotator']['user'], True)
+        if task['node']['first_response']:
+          item['task_answer'] = task_answer(task['node'])
+          item['task_date_answered'] = pd.Timestamp.fromtimestamp(int(media['node']['created_at']))
+          item['task_answered_by'] = format_user(task['node']['first_response']['annotator']['user'], False)
+          item['task_answered_by_anon'] = format_user(task['node']['first_response']['annotator']['user'], True)
+        df.append(item)
   return pd.DataFrame(df)
 
 async def fetch(params, **kwargs):
