@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 import pandas as pd
 import json
+import sys
 from pandas.testing import assert_frame_equal
 from check import render, flatten
 
@@ -12,7 +13,7 @@ class FetchResult:
 
 class TestCheck(unittest.TestCase):
   def setUp(self):
-    self.file = open('./test_check.json')
+    self.file = open(sys.argv[2] if len(sys.argv) > 2 else './test_check.json')
     self.data = json.load(self.file)
 
   def tearDown(self):

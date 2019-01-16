@@ -5,18 +5,19 @@ import aiohttp
 from collections import OrderedDict
 import os.path
 import base64
+from functools import reduce
+import operator
 
 class CheckError(Exception):
   pass
 
-# https://stackoverflow.com/a/43621819/209184
-def dict_get(_dict, keys, default=None):
-  for key in keys:
-    if isinstance(_dict, dict):
-      _dict = _dict.get(key, default)
-    else:
-      return default
-  return _dict
+def dict_get(dict_, path, default = None):
+  try:
+    return reduce(operator.getitem, path, dict_)
+  except IndexError:
+    return default
+  except TypeError:
+    return default
 
 def parse_date(date_string, default=None):
   try:
@@ -198,7 +199,7 @@ def flatten(data):
   df = []
   project = data['data']['node']
   for media in project['project_medias']['edges']:
-    metadata = json.loads(media['node']['metadata'])
+    metadata = json.loads(dict_get(media, ['node', 'metadata'], { 'title': 'missing', 'description': 'missing' }))
     base = OrderedDict({
       'project': project['title'],
       'identifier': str(media['node']['dbid']),
@@ -231,13 +232,15 @@ def flatten(data):
         item['task'] = i+1
         item['task_question'] = task['node']['label']
         item['task_comments'] = task_comments(task['node'])
-        item['task_added_by'] = format_user(task['node']['annotator']['user'], False)
-        item['task_added_by_anon'] = format_user(task['node']['annotator']['user'], True)
+        author = dict_get(task, ['node', 'annotator', 'user'], { 'name': 'missing', 'id': 'missing' })
+        item['task_added_by'] = format_user(author, False)
+        item['task_added_by_anon'] = format_user(author, True)
         if task['node']['first_response']:
           item['task_answer'] = task_answer(task['node'])
           item['task_date_answered'] = pd.Timestamp.fromtimestamp(int(media['node']['created_at']))
-          item['task_answered_by'] = format_user(task['node']['first_response']['annotator']['user'], False)
-          item['task_answered_by_anon'] = format_user(task['node']['first_response']['annotator']['user'], True)
+          author = dict_get(task, ['node', 'first_response', 'annotator', 'user'], { 'name': 'missing', 'id': 'missing' })
+          item['task_answered_by'] = format_user(author, False)
+          item['task_answered_by_anon'] = format_user(author, True)
         df.append(item)
   return pd.DataFrame(df)
 
