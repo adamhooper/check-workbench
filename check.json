@@ -8,6 +8,11 @@
   "icon": "meedan",
   "parameters": [
     {
+      "name": "Project URL",
+      "id_name": "project",
+      "type": "string"
+    },
+    {
       "name": "API URL",
       "id_name": "host",
       "type": "string"
@@ -15,11 +20,6 @@
     {
       "name": "API key",
       "id_name": "key",
-      "type": "string"
-    },
-    {
-      "name": "Project URL",
-      "id_name": "project",
       "type": "string"
     },
     {

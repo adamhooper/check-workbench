@@ -81,7 +81,7 @@ query {
         created_at
         label
         status
-        first_response {
+        responses { edges { node {
           annotator {
             user {
               id
@@ -90,7 +90,7 @@ query {
           }
           created_at
           content
-        }
+        }}}
         log { edges { node {
           annotation {
             annotator {
@@ -178,8 +178,8 @@ def media_comments(media):
     ))
   )
 
-def task_answer(task):
-  content = json.loads(task['first_response']['content'])
+def task_response(response):
+  content = json.loads(response['content'])
   for field in content:
     if field['field_name'].startswith('response_'):
       return field['formatted_value']
@@ -202,7 +202,7 @@ def flatten(data):
     metadata = json.loads(dict_get(media, ['node', 'metadata'], { 'title': 'missing', 'description': 'missing' }))
     base = OrderedDict({
       'project': project['title'],
-      'identifier': str(media['node']['dbid']),
+      'item': str(media['node']['dbid']),
       'title': metadata['title'],
       'added_by': format_user(media['node']['user'], False),
       'added_by_anon': format_user(media['node']['user'], True),
@@ -229,19 +229,24 @@ def flatten(data):
     else:
       for i, task in enumerate(array_reverse(media['node']['tasks']['edges'])):
         item = base.copy()
-        item['task'] = i+1
+        item['task'] = base['item'] + '/' + str(i+1)
         item['task_question'] = task['node']['label']
         item['task_comments'] = task_comments(task['node'])
         author = dict_get(task, ['node', 'annotator', 'user'], { 'name': 'missing', 'id': 'missing' })
         item['task_added_by'] = format_user(author, False)
         item['task_added_by_anon'] = format_user(author, True)
-        if task['node']['first_response']:
-          item['task_answer'] = task_answer(task['node'])
-          item['task_date_answered'] = pd.Timestamp.fromtimestamp(int(media['node']['created_at']))
-          author = dict_get(task, ['node', 'first_response', 'annotator', 'user'], { 'name': 'missing', 'id': 'missing' })
-          item['task_answered_by'] = format_user(author, False)
-          item['task_answered_by_anon'] = format_user(author, True)
-        df.append(item)
+        if len(task['node']['responses']['edges']) == 0:
+          df.append(item)
+        else:
+          for j, response in enumerate(task['node']['responses']['edges']):
+            row = item.copy()
+            row['task_response'] = item['task'] + '/' + str(j+1)
+            row['task_response_content'] = task_response(response['node'])
+            row['task_response_date'] = pd.Timestamp.fromtimestamp(int(response['node']['created_at']))
+            author = dict_get(response, ['node', 'annotator', 'user'], { 'name': 'missing', 'id': 'missing' })
+            row['task_response_by'] = format_user(author, False)
+            row['task_response_by_anon'] = format_user(author, True)
+            df.append(row)
   return pd.DataFrame(df)
 
 async def fetch(params, **kwargs):
