@@ -27,4 +27,4 @@ Optionally, you may want to use your local Check API:
 - Start local Workbench as above
 - `NETWORK=cjworkbench_dev docker-compose up` in Check
 - Open http://localhost:8000 and start a new workflow
-- Add a Check step with configuration "API key" = `dev`, "API host" = `http://api:3000`, "Team" = your team's slug
+- Add a Check step with configuration "API key" = `dev`, "API host" = `http://api:3000`, "Project URL" = The URL for the project you'd like to import
