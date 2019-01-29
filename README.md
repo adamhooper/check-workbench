@@ -8,7 +8,7 @@ A [CJWorkbench](https://github.com/CJWorkbench/cjworkbench) data source plugin f
 - In Check, obtain a new API key for your team
 - In Workbench, import custom module https://github.com/meedan/check-workbench
 - Start a new workflow
-- Add a Check step with configuration "API key" as per above, "API host" = `https://check-api.checkmedia.org`, "Team" = your team's slug
+- Add a Check step with configuration "API Key" as per above, "API URL" = https://check-api.checkmedia.org, "Project URL" = The URL for the project you'd like to import
 
 ## Development
 
