@@ -153,7 +153,21 @@ def media_time_to_status(media, first=True):
   if len(times) == 0:
     return None
   time = times[0] if first else times[-1]
-  return pd.Timedelta(seconds=(int(time) - int(media['node']['created_at'])))
+
+  tdiff = int(time) - int(media['node']['created_at'])
+
+  # Format as '1d 2h 1m30s'
+  days, rem = divmod(tdiff, 86400)
+  hours, rem = divmod(rem, 3600)
+  minutes, seconds = divmod(rem, 60)
+  ret = '%dd %dh %dm%ds' % (days, hours, minutes, seconds)
+  if ret.startswith('0d '):
+    ret = ret[3:]
+  if ret.startswith('0h '):
+    ret = ret[3:]
+  if ret.startswith('0m'):
+    ret = ret[2:]
+  return ret
 
 def format_comments(comments):
   if len(comments) == 0:
