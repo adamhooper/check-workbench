@@ -17,7 +17,7 @@ You need Workbench running locally.
 - Clone this repo
 - `python ./setup.py test`
 - Clone [Workbench](https://github.com/CJWorkbench/cjworkbench) in a sibling directory
-- `CACHE_MODULES=false bin/dev start` in Workbench
+- `bin/dev start` in Workbench
 - `bin/dev develop-module check-workbench` in Workbench
 - Open http://localhost:8000 and start a new workflow
 - Add a Check step with configuration as per Usage section

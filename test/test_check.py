@@ -1,3 +1,4 @@
+from pathlib import Path
 import unittest
 import numpy as np
 import pandas as pd
@@ -13,11 +14,9 @@ class FetchResult:
 
 class TestCheck(unittest.TestCase):
   def setUp(self):
-    self.file = open(sys.argv[2] if len(sys.argv) > 2 else './test_check.json')
-    self.data = json.load(self.file)
-
-  def tearDown(self):
-    self.file.close()
+    self.data = json.loads(
+        (Path(__file__).parent / 'test_check.json').read_text()
+    )
 
   def test_flatten(self):
     df = flatten(self.data)
