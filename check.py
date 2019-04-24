@@ -257,16 +257,19 @@ async def fetch(params, **kwargs):
 
 def render(table, params, *, fetch_result, **kwargs):
   if fetch_result is None:
-    return fetch_result
+    return pd.DataFrame()
   if fetch_result.status == 'error':
-    return fetch_result
+    return fetch_result.status
   if fetch_result.dataframe.empty:
-    return fetch_result
+    return pd.DataFrame()
 
-  columns = [c for c in list(fetch_result.dataframe) if c.endswith('_anon')]
-  for c in columns:
-    if params['anonymize']:
-      del fetch_result.dataframe[c.replace('_anon', '')]
-    else:
-      del fetch_result.dataframe[c]
-  return fetch_result
+  dataframe = fetch_result.dataframe
+
+  # Anonymize
+  columns_to_drop = [c for c in dataframe.columns if c.endswith('_anon')]
+  if params['anonymize']:
+    columns_to_drop = [c.replace('_anon', '') for c in columns_to_drop]
+
+  dataframe = dataframe.drop(columns_to_drop, axis=1)
+
+  return dataframe
